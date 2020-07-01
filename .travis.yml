@@ -33,6 +33,8 @@ branches:
 
 before_install:
   - docker run -d --name influxdb -e INFLUXDB_DB=openwisp2 -p 8086:8086 influxdb:alpine
+  # TODO: Change the command to create 'openwisp2' database
+  # - docker run -it --rm -v ~/victoria-metrics-data:/victoria-metrics-data -p 8428:8428 victoriametrics/victoria-metrics
   - pip install -U pip wheel setuptools
   - pip install $DJANGO
   - pip install -U -r requirements-test.txt

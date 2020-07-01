@@ -17,12 +17,12 @@ DATABASES = {
 }
 
 TIMESERIES_DATABASE = {
-    'BACKEND': 'openwisp_monitoring.db.backends.influxdb',
+    'BACKEND': 'openwisp_monitoring.db.backends.victoriametrics',
     'USER': 'openwisp',
     'PASSWORD': 'openwisp',
     'NAME': 'openwisp2',
     'HOST': 'localhost',
-    'PORT': '8086',
+    'PORT': '8428',
 }
 
 SECRET_KEY = 'fn)t*+$)ugeyip6-#txyy$5wf2ervc0d2n#h)qb)y5@ly$t*@w'

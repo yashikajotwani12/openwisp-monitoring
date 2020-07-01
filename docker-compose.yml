@@ -18,5 +18,14 @@ services:
       - "6379:6379"
     entrypoint: redis-server --appendonly yes
 
+  # TODO: Provide 'openwisp2' as db and authentication details
+  victoria-metrics:
+    image: victoriametrics/victoria-metrics:latest
+    ports:
+      - "8428:8428"
+    volumes:
+      - victoria-metrics-data:/var/lib/victoria-metrics
+
 volumes:
   influxdb-data:
+  victoria-metrics-data:
