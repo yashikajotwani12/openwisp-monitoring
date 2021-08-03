@@ -5,7 +5,7 @@ from django.urls import reverse
 from swapper import load_model
 
 from openwisp_controller.geo.tests.utils import TestGeoMixin
-from openwisp_utils.tests import catch_signal
+from openwisp_utils.tests import capture_any_output, catch_signal
 
 from ... import settings as monitoring_settings
 from ..signals import device_metrics_received
@@ -351,6 +351,7 @@ class TestDeviceApi(DeviceMonitoringTestCase):
             signal=device_metrics_received,
         )
 
+    @capture_any_output()
     def test_invalid_chart_config(self):
         # Tests if chart_config is invalid, then it is skipped and API does not fail
         d = self._create_device(organization=self._create_org())
@@ -534,6 +535,298 @@ class TestDeviceApi(DeviceMonitoringTestCase):
             number += 1
             with self.subTest(interface_data['name']):
                 self.assertEqual(r.status_code, 400)
+
+    def test_mobile_charts(self):
+        org = self._create_org()
+        device = self._create_device(organization=org)
+        charts_count = Chart.objects.count()
+        data = {
+            'type': 'DeviceMonitoring',
+            'interfaces': [
+                {
+                    'name': 'mobile0',
+                    'mac': '00:00:00:00:00:00',
+                    'mtu': 1900,
+                    'multicast': True,
+                    'txqueuelen': 1000,
+                    'type': 'modem-manager',
+                    'up': True,
+                    'mobile': {
+                        'connection_status': 'connected',
+                        'imei': '300000001234567',
+                        'manufacturer': 'Sierra Wireless, Incorporated',
+                        'model': 'MC7430',
+                        'operator_code': '50502',
+                        'operator_name': 'YES OPTUS',
+                        'power_status': 'on',
+                        'signal': {
+                            'lte': {'rsrp': -75, 'rsrq': -8, 'rssi': -51, 'snr': 13},
+                        },
+                    },
+                }
+            ],
+        }
+        self._post_data(device.id, device.key, data)
+        data['interfaces'][0]['mobile']['signal'].update(
+            {'umts': {'ecio': 2, 'rscp': -14, 'rssi': -80}}
+        )
+        self._post_data(device.id, device.key, data)
+        response = self.client.get(self._url(device.pk.hex, device.key))
+        self.assertEqual(response.status_code, 200)
+        charts = response.data['charts']
+        self.assertEqual(charts[0]['summary']['signal_strength'], -51.0)
+        self.assertEqual(charts[0]['summary']['signal_power'], -75.0)
+        self.assertEqual(charts[1]['summary']['signal_quality'], -8.0)
+        self.assertEqual(charts[1]['summary']['signal_to_noise_ratio'], 13.0)
+        self.assertEqual(charts[2]['summary']['access_tech'], 4.0)
+        # ensure correct color-coding
+        self.assertEqual(
+            charts[2]['colorscale']['map'],
+            [
+                [5, '#377873', '5g'],
+                [4, '#67c368', 'lte'],
+                [3, '#efdd50', 'umts'],
+                [2, '#df7514', 'evdo'],
+                [1, '#dd5817', 'cdma1x'],
+                [0, '#b42a0c', 'gsm'],
+            ],
+        )
+        self.assertEqual(Chart.objects.count(), charts_count + 3)
+
+    def test_5g_charts(self):
+        org = self._create_org()
+        device = self._create_device(organization=org)
+        data = {
+            'type': 'DeviceMonitoring',
+            'interfaces': [
+                {
+                    'name': 'mobile0',
+                    'mac': '00:00:00:00:00:00',
+                    'mtu': 1900,
+                    'multicast': True,
+                    'txqueuelen': 1000,
+                    'type': 'modem-manager',
+                    'up': True,
+                    'mobile': {
+                        'connection_status': 'connected',
+                        'imei': '300000001234567',
+                        'manufacturer': 'Sierra Wireless, Incorporated',
+                        'model': 'MC7430',
+                        'operator_code': '50502',
+                        'operator_name': 'YES OPTUS',
+                        'power_status': 'on',
+                        'signal': {
+                            'lte': {'rsrp': -75, 'rsrq': -8, 'rssi': -51, 'snr': 13},
+                            '5g': {'rsrp': -70, 'rsrq': -7, 'snr': 12},
+                        },
+                    },
+                }
+            ],
+        }
+        response = self._post_data(device.id, device.key, data)
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get(self._url(device.pk.hex, device.key))
+        self.assertEqual(response.status_code, 200)
+        charts = response.data['charts']
+        self.assertEqual(charts[0]['summary']['signal_power'], -70.0)
+        self.assertEqual(charts[0]['summary']['signal_strength'], None)
+        self.assertEqual(charts[1]['summary']['signal_quality'], -7.0)
+        self.assertEqual(charts[1]['summary']['signal_to_noise_ratio'], 12.0)
+        self.assertEqual(charts[2]['summary']['access_tech'], 5)
+
+    def test_umts_rscp_missing(self):
+        org = self._create_org()
+        device = self._create_device(organization=org)
+        data = {
+            'type': 'DeviceMonitoring',
+            'interfaces': [
+                {
+                    'name': 'mobile0',
+                    'mac': '00:00:00:00:00:00',
+                    'mtu': 1900,
+                    'multicast': True,
+                    'txqueuelen': 1000,
+                    'type': 'modem-manager',
+                    'up': True,
+                    'mobile': {
+                        'connection_status': 'connected',
+                        'imei': '300000001234567',
+                        'manufacturer': 'Sierra Wireless, Incorporated',
+                        'model': 'MC7430',
+                        'operator_code': '50502',
+                        'operator_name': 'YES OPTUS',
+                        'power_status': 'on',
+                        'signal': {'umts': {'ecio': -5, 'rssi': -69}},
+                    },
+                }
+            ],
+        }
+        response = self._post_data(device.id, device.key, data)
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get(self._url(device.pk.hex, device.key))
+        self.assertEqual(response.status_code, 200)
+        charts = response.data['charts']
+        self.assertEqual(len(charts), 3)
+        self.assertEqual(charts[0]['summary']['signal_strength'], -69.0)
+        self.assertEqual(charts[0]['summary']['signal_power'], None)
+        self.assertEqual(charts[1]['summary']['signal_quality'], None)
+        self.assertEqual(charts[1]['summary']['signal_to_noise_ratio'], -5.0)
+        self.assertEqual(charts[2]['summary']['access_tech'], 3.0)
+
+    def test_umts_rssi_missing(self):
+        org = self._create_org()
+        device = self._create_device(organization=org)
+        data = {
+            'type': 'DeviceMonitoring',
+            'interfaces': [
+                {
+                    'name': 'mobile0',
+                    'mac': '00:00:00:00:00:00',
+                    'mtu': 1900,
+                    'multicast': True,
+                    'txqueuelen': 1000,
+                    'type': 'modem-manager',
+                    'up': True,
+                    'mobile': {
+                        'connection_status': 'connected',
+                        'imei': '300000001234567',
+                        'manufacturer': 'Sierra Wireless, Incorporated',
+                        'model': 'MC7430',
+                        'operator_code': '50502',
+                        'operator_name': 'YES OPTUS',
+                        'power_status': 'on',
+                        'signal': {'umts': {'ecio': -3.50, 'rscp': -96.00}},
+                    },
+                }
+            ],
+        }
+        response = self._post_data(device.id, device.key, data)
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get(self._url(device.pk.hex, device.key))
+        self.assertEqual(response.status_code, 200)
+        charts = response.data['charts']
+        self.assertEqual(len(charts), 3)
+        self.assertEqual(charts[0]['summary']['signal_strength'], None)
+        self.assertEqual(charts[0]['summary']['signal_power'], -96.00)
+        self.assertEqual(charts[1]['summary']['signal_quality'], None)
+        self.assertEqual(charts[1]['summary']['signal_to_noise_ratio'], -4)
+        self.assertEqual(charts[2]['summary']['access_tech'], 3.0)
+
+    def test_cdma_charts(self):
+        org = self._create_org()
+        device = self._create_device(organization=org)
+        data = {
+            'type': 'DeviceMonitoring',
+            'interfaces': [
+                {
+                    'name': 'mobile0',
+                    'mac': '00:00:00:00:00:00',
+                    'mtu': 1900,
+                    'multicast': True,
+                    'txqueuelen': 1000,
+                    'type': 'modem-manager',
+                    'up': True,
+                    'mobile': {
+                        'connection_status': 'connected',
+                        'imei': '300000001234567',
+                        'manufacturer': 'Sierra Wireless, Incorporated',
+                        'model': 'MC7430',
+                        'operator_code': '50502',
+                        'operator_name': 'YES OPTUS',
+                        'power_status': 'on',
+                        'signal': {'cdma1x': {'ecio': -5, 'rssi': -69}},
+                    },
+                }
+            ],
+        }
+        response = self._post_data(device.id, device.key, data)
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get(self._url(device.pk.hex, device.key))
+        self.assertEqual(response.status_code, 200)
+        charts = response.data['charts']
+        self.assertEqual(len(charts), 3)
+        self.assertEqual(charts[0]['summary']['signal_strength'], -69.0)
+        self.assertEqual(charts[0]['summary']['signal_power'], None)
+        self.assertEqual(charts[1]['summary']['signal_quality'], None)
+        self.assertEqual(charts[1]['summary']['signal_to_noise_ratio'], -5.0)
+        self.assertEqual(charts[2]['summary']['access_tech'], 1.0)
+
+    def test_evdo_charts(self):
+        org = self._create_org()
+        device = self._create_device(organization=org)
+        data = {
+            'type': 'DeviceMonitoring',
+            'interfaces': [
+                {
+                    'name': 'mobile0',
+                    'mac': '00:00:00:00:00:00',
+                    'mtu': 1900,
+                    'multicast': True,
+                    'txqueuelen': 1000,
+                    'type': 'modem-manager',
+                    'up': True,
+                    'mobile': {
+                        'connection_status': 'connected',
+                        'imei': '300000001234567',
+                        'manufacturer': 'Sierra Wireless, Incorporated',
+                        'model': 'MC7430',
+                        'operator_code': '50502',
+                        'operator_name': 'YES OPTUS',
+                        'power_status': 'on',
+                        'signal': {
+                            'evdo': {'ecio': -5, 'rssi': -69, 'io': -70, 'sinr': -11},
+                        },
+                    },
+                }
+            ],
+        }
+        response = self._post_data(device.id, device.key, data)
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get(self._url(device.pk.hex, device.key))
+        self.assertEqual(response.status_code, 200)
+        charts = response.data['charts']
+        self.assertEqual(len(charts), 3)
+        self.assertEqual(charts[0]['summary']['signal_strength'], -69.0)
+        self.assertEqual(charts[0]['summary']['signal_power'], None)
+        self.assertEqual(charts[1]['summary']['signal_quality'], None)
+        self.assertEqual(charts[1]['summary']['signal_to_noise_ratio'], -11.0)
+        self.assertEqual(charts[2]['summary']['access_tech'], 2.0)
+
+    def test_gsm_charts(self):
+        org = self._create_org()
+        device = self._create_device(organization=org)
+        data = {
+            'type': 'DeviceMonitoring',
+            'interfaces': [
+                {
+                    'name': 'mobile0',
+                    'mac': '00:00:00:00:00:00',
+                    'mtu': 1900,
+                    'multicast': True,
+                    'txqueuelen': 1000,
+                    'type': 'modem-manager',
+                    'up': True,
+                    'mobile': {
+                        'connection_status': 'connected',
+                        'imei': '300000001234567',
+                        'manufacturer': 'Sierra Wireless, Incorporated',
+                        'model': 'MC7430',
+                        'operator_code': '50502',
+                        'operator_name': 'YES OPTUS',
+                        'power_status': 'on',
+                        'signal': {'gsm': {'rssi': -70}},
+                    },
+                }
+            ],
+        }
+        response = self._post_data(device.id, device.key, data)
+        self.assertEqual(response.status_code, 200)
+        response = self.client.get(self._url(device.pk.hex, device.key))
+        self.assertEqual(response.status_code, 200)
+        charts = response.data['charts']
+        self.assertEqual(len(charts), 2)
+        self.assertEqual(charts[0]['summary']['signal_power'], None)
+        self.assertEqual(charts[0]['summary']['signal_strength'], -70.0)
 
 
 class TestGeoApi(TestGeoMixin, DeviceMonitoringTestCase):

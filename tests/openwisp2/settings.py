@@ -126,7 +126,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'openwisp_utils.admin_theme.context_processor.menu_items',
+                'openwisp_utils.admin_theme.context_processor.menu_groups',
                 'openwisp_utils.admin_theme.context_processor.admin_theme_settings',
                 'openwisp_notifications.context_processors.notification_api_settings',
             ],
@@ -190,6 +190,8 @@ else:
 # avoid slowing down the test suite with mac vendor lookups
 if TESTING:
     OPENWISP_MONITORING_MAC_VENDOR_DETECTION = False
+    OPENWISP_MONITORING_API_URLCONF = 'openwisp_monitoring.urls'
+    OPENWISP_MONITORING_API_BASEURL = 'http://testserver'
 
 # Temporarily added to identify slow tests
 TEST_RUNNER = 'openwisp_utils.tests.TimeLoggingTestRunner'
