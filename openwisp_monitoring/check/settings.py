@@ -13,5 +13,5 @@ CHECK_CLASSES = get_settings_value(
 )
 AUTO_PING = get_settings_value('AUTO_PING', True)
 AUTO_CONFIG_CHECK = get_settings_value('AUTO_DEVICE_CONFIG_CHECK', True)
-AUTO_SNMP_DEVICEMONITORING = get_settings_value('OPENWISP_MONITORING_AUTO_SNMP_DEVICEMONITORING', False)
+AUTO_SNMP_DEVICEMONITORING = get_settings_value('AUTO_SNMP_DEVICEMONITORING', False)
 MANAGEMENT_IP_ONLY = get_settings_value('MANAGEMENT_IP_ONLY', True)
