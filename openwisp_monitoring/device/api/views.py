@@ -219,10 +219,10 @@ class MetricChartsMixin:
 
     def _write_memory(self, memory, primary_key, content_type):
         extra_values = {
-            'total_memory': memory['total'],
-            'free_memory': memory['free'],
-            'buffered_memory': memory['buffered'],
-            'shared_memory': memory['shared'],
+            'total_memory': memory.get('total'),
+            'free_memory': memory.get('free'),
+            'buffered_memory': memory.get('buffered'),
+            'shared_memory': memory.get('shared'),
         }
         if 'cached' in memory:
             extra_values['cached_memory'] = memory.get('cached')
